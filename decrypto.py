@@ -21,6 +21,20 @@ NAMESPACES = {
     'comp': 'http://www.idpf.org/2016/encryption#compression'
 }
 
+def find_opf_path(workdir):
+    container_path = os.path.join(workdir, 'META-INF', 'container.xml')
+    try:
+        tree = etree.parse(container_path)
+        rootfile = tree.find('.//{urn:oasis:names:tc:opendocument:xmlns:container}rootfile')
+        if rootfile is not None:
+            return os.path.join(workdir, rootfile.get('full-path'))
+        else:
+            print("[!] rootfile not found in container.xml.")
+            return None
+    except Exception as e:
+        print(f"[!] Failed to parse container.xml: {e}")
+        return None
+
 def get_epub_title(opf_path):
     try:
         tree = etree.parse(opf_path)
@@ -159,7 +173,10 @@ def decrypt_epub(epub_path, aes_key, output_path):
 
     os.remove(enc_xml)
     
-    opf_path = os.path.join(workdir, 'OPS', 'package.opf')
+    opf_path = find_opf_path(workdir)
+    if not opf_path or not os.path.exists(opf_path):
+        print("[!] Could not locate package.opf.")
+        sys.exit(1)
     title = get_epub_title(opf_path)
     safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()
     output_path = f"{safe_title}.epub"
