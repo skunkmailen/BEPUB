@@ -1,3 +1,5 @@
+Fungerar endast på böcker som du har lånat via Biblio.
+
 Python-delen.
 1) Installera Chrome/Firefox-webbläsare.
 2) Installera Python.
