@@ -110,12 +110,16 @@ def parse_encryption_xml(enc_xml_path):
             continue
         uri = cipher_ref.get('URI')
 
+        method_elem = enc_data.find('.//enc:EncryptionMethod', namespaces=NAMESPACES)
+        algorithm = method_elem.get('Algorithm') if method_elem is not None else None
+
         compression_elem = enc_data.find('.//enc:EncryptionProperty/comp:Compression', namespaces=NAMESPACES)
         compression = compression_elem.get('Method') if compression_elem is not None else None
         original_length = int(compression_elem.get('OriginalLength')) if compression_elem is not None else None
 
         encrypted_files.append({
             'URI': uri,
+            'algorithm': algorithm,
             'compression_method': compression,
             'original_length': original_length
         })
@@ -131,6 +135,10 @@ def remove_pkcs7_padding(data):
 def decrypt_aes128_cbc(data, key):
     iv = data[:16]
     ciphertext = data[16:]
+
+    if len(ciphertext) % 16 != 0:
+        raise ValueError(f"Ciphertext length {len(ciphertext)} is not a multiple of 16.")
+
     cipher = AES.new(key, AES.MODE_CBC, iv)
     decrypted = cipher.decrypt(ciphertext)
     try:
@@ -161,6 +169,10 @@ def decrypt_epub(epub_path, aes_key, output_path):
     encrypted_files = parse_encryption_xml(enc_xml)
 
     for ef in encrypted_files:
+        print(f"[+] Decrypting: {ef['URI']}")
+        if ef['algorithm'] != 'http://www.w3.org/2001/04/xmlenc#aes128-cbc':
+            print(f"[i] Skipping unsupported algorithm for '{ef['URI']}': {ef['algorithm']}")
+            continue
         target = os.path.join(workdir, *ef['URI'].split('/'))
         if not os.path.exists(target):
             continue
