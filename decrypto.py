@@ -6,6 +6,9 @@ import requests
 import binascii
 import tempfile
 import zlib
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import configparser
 
 from lxml import etree
 from Crypto.Cipher import AES
@@ -14,7 +17,23 @@ from cryptography.hazmat.primitives import hashes, padding as crypto_padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
-# Namespace map
+# === Config handling ===
+CONFIG_PATH = 'settings.ini'
+
+def load_last_folder():
+    config = configparser.ConfigParser()
+    if os.path.exists(CONFIG_PATH):
+        config.read(CONFIG_PATH)
+        return config.get('settings', 'last_folder', fallback=os.getcwd())
+    return os.getcwd()
+
+def save_last_folder(path):
+    config = configparser.ConfigParser()
+    config['settings'] = {'last_folder': path}
+    with open(CONFIG_PATH, 'w') as f:
+        config.write(f)
+
+# === EPUB Functions ===
 NAMESPACES = {
     'enc': 'http://www.w3.org/2001/04/xmlenc#',
     'ds': 'http://www.w3.org/2000/09/xmldsig#',
@@ -157,7 +176,7 @@ def decompress_if_needed(data, method):
                 return data
     return data
 
-def decrypt_epub(epub_path, aes_key, output_path):
+def decrypt_epub(epub_path, aes_key, output_folder):
     workdir = tempfile.mkdtemp()
     unzip_epub(epub_path, workdir)
 
@@ -191,31 +210,65 @@ def decrypt_epub(epub_path, aes_key, output_path):
         sys.exit(1)
     title = get_epub_title(opf_path)
     safe_title = "".join(c for c in title if c.isalnum() or c in " -_").strip()
-    output_path = f"{safe_title}.epub"
+    output_path = os.path.join(output_folder, f"{safe_title}.epub")
     
     zip_epub(workdir, output_path)
     shutil.rmtree(workdir)
     print(f"[+] Decrypted EPUB saved to '{output_path}'")
 
+# === GUI ===
+def run_gui():
+    def on_browse():
+        folder = filedialog.askdirectory(initialdir=load_last_folder(), title="Välj mapp")
+        if folder:
+            folder_var.set(folder)
+
+    def on_submit():
+        data = entry_input.get().strip()
+        folder = folder_var.get().strip()
+        if not data or not folder:
+            messagebox.showerror("Fel", "Klistra in info och välj mapp.")
+            return
+        save_last_folder(folder)
+        root.quit()
+        root.destroy()
+        main_process(data, folder)
+
+    root = tk.Tk()
+    root.title("BEBUP")
+
+    tk.Label(root, text="Klistra in info").grid(row=0, column=0, padx=10, pady=5, sticky='w')
+    entry_input = tk.Entry(root, width=80)
+    entry_input.grid(row=1, column=0, columnspan=3, padx=10, pady=5)
+
+    tk.Label(root, text="Mapp:").grid(row=2, column=0, padx=10, pady=5, sticky='w')
+    folder_var = tk.StringVar(value=load_last_folder())
+    folder_entry = tk.Entry(root, textvariable=folder_var, width=70)
+    folder_entry.grid(row=3, column=0, padx=10, pady=5, sticky='w')
+    browse_button = tk.Button(root, text="Bläddra", command=on_browse)
+    browse_button.grid(row=3, column=1, padx=5, pady=5, sticky='w')
+
+    submit_button = tk.Button(root, text="Start", command=on_submit)
+    submit_button.grid(row=4, column=0, columnspan=3, pady=10)
+
+    root.mainloop()
+
 # === Main ===
-if __name__ == "__main__":
-    user_input = input("Enter LINK;USERID;KEY: ").strip()
+def main_process(user_input, folder):
     try:
         link, uid, encrypted_hex = [part.strip() for part in user_input.split(";")]
     except ValueError:
-        print("[!] Invalid input format. Use: LINK;USERID;KEY")
+        print("[!] Fel format! Ange: LINK;USERID;KEY")
         sys.exit(1)
 
-    # Prepare filenames
-    input_epub = "input.epub"
-    output_epub = "decrypted.epub"
-
-    download_epub(link, input_epub)
+    temp_epub = os.path.join(tempfile.gettempdir(), "input.epub")
+    download_epub(link, temp_epub)
     aes_key = decrypt_key(encrypted_hex, uid)
     print(f"[+] AES key: {aes_key.hex()}")
 
-    decrypt_epub(input_epub, aes_key, output_epub)
+    decrypt_epub(temp_epub, aes_key, folder)
+    os.remove(temp_epub)
+    print("[+] Done.")
 
-    # Clean up
-    os.remove(input_epub)
-    print("[+] Cleanup complete.")
+if __name__ == "__main__":
+    run_gui()
