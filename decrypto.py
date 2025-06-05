@@ -215,6 +215,7 @@ def decrypt_epub(epub_path, aes_key, output_folder):
     zip_epub(workdir, output_path)
     shutil.rmtree(workdir)
     print(f"[+] Decrypted EPUB saved to '{output_path}'")
+    messagebox.showinfo("Färdig", f"EPUB sparad till:\n{output_path}")
 
 # === GUI ===
 def run_gui():
@@ -229,13 +230,16 @@ def run_gui():
         if not data or not folder:
             messagebox.showerror("Fel", "Klistra in info och välj mapp.")
             return
+
         save_last_folder(folder)
-        root.quit()
-        root.destroy()
-        main_process(data, folder)
+        try:
+            main_process(data, folder)
+            entry_input.delete(0, tk.END)  # Clear the input field
+        except Exception as e:
+            messagebox.showerror("Fel", f"Felmeddelande: {e}")
 
     root = tk.Tk()
-    root.title("BEBUP")
+    root.title("BEBUP v0.1.1")
 
     tk.Label(root, text="Klistra in info").grid(row=0, column=0, padx=10, pady=5, sticky='w')
     entry_input = tk.Entry(root, width=80)
@@ -258,7 +262,7 @@ def main_process(user_input, folder):
     try:
         link, uid, encrypted_hex = [part.strip() for part in user_input.split(";")]
     except ValueError:
-        print("[!] Fel format! Ange: LINK;USERID;KEY")
+        print("[!] Fel format på kod!")
         sys.exit(1)
 
     temp_epub = os.path.join(tempfile.gettempdir(), "input.epub")
